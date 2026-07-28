@@ -203,15 +203,37 @@ extension PeripheralManager: CBPeripheralDelegate {
             return
         }
 
+        guard !data.isEmpty else {
+            logger.warning("Zero-length data received")
+            return
+        }
+
         let isE3 = cgmManager.state.security == .none
         if isE3 {
             buffer.append(data)
         } else {
+            guard data.count >= (buffer.isEmpty ? 3 : 2) else {
+                logger.warning("Encoded 365 packet chunk too short - count: \(data.count), data: \(data.hexString())")
+                buffer = Data()
+                return
+            }
+
             buffer.append(data.subdata(in: (buffer.isEmpty ? 3 : 2) ..< data.count))
         }
         var actualData = Data(buffer)
 
+        guard !actualData.isEmpty else {
+            logger.warning("Decoded packet buffer is empty")
+            return
+        }
+
         if !isE3 {
+            guard data.count >= 2 else {
+                logger.warning("Encoded 365 packet too short for chunk marker - count: \(data.count), data: \(data.hexString())")
+                buffer = Data()
+                return
+            }
+
             if data[0] != data[1] {
                 // Data is chuncked, lets store this and wait
                 return
@@ -246,7 +268,8 @@ extension PeripheralManager: CBPeripheralDelegate {
             return
         }
 
-        if actualData[0] == Eversense365.PacketIds.NotificationId.rawValue,
+        if actualData.count >= 2,
+           actualData[0] == Eversense365.PacketIds.NotificationId.rawValue,
            actualData[1] == Eversense365.PushIds.KeepAlive.rawValue
         {
             let packet = Eversense365.PushKeepAlivePacket()
@@ -263,7 +286,8 @@ extension PeripheralManager: CBPeripheralDelegate {
             return
         }
 
-        if actualData[0] == Eversense365.PacketIds.NotificationId.rawValue,
+        if actualData.count >= 2,
+           actualData[0] == Eversense365.PacketIds.NotificationId.rawValue,
            actualData[1] == Eversense365.PushIds.AlarmWithData.rawValue
         {
             let packet = Eversense365.PushAlarmWithDataPacket(currentGlucose: cgmManager.state.recentGlucoseInMgDl ?? 0)

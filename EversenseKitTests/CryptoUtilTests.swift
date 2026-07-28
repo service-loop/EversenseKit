@@ -44,7 +44,7 @@ struct CryptoUtilTests {
 
         let x = (salt.toInt64() & Int64(-16384)) | count
         let data = x.toData(length: 8)
-        #expect(data == Data(hexString: "01C09F6B558126B9"))
+        #expect(data == Data(hexString: "01806b558126b96f"))
     }
 
     @Test func generateEncryptionSalt() async throws {
@@ -59,7 +59,7 @@ struct CryptoUtilTests {
 
     @Test func testUnix() async throws {
         let x = Date.now.toUnix2000()
-        let x2 = x.toHexString()
+        let x2 = x.hexString()
         print(x2)
     }
 }

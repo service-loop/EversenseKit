@@ -113,6 +113,12 @@ class CryptoUtil {
     }
 
     func decrypt(data: Data) -> Data {
+        let tagLength = 8
+        guard data.count >= 2 + tagLength else {
+            CryptoUtil.logger.error("[decrypt] Encrypted payload too short - count: \(data.count), data: \(data.hexString())")
+            return Data()
+        }
+
         guard let sessionKey = sessionKey else {
             CryptoUtil.logger.error("[decrypt] No sessionKey stored...")
             return Data()
