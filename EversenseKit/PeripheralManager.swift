@@ -23,6 +23,8 @@ class PeripheralManager: NSObject {
     private var writeQueue: EversenseKitDispatchGroup?
     private let writeSemaphore = DispatchSemaphore(value: 1)
     private var writeResponse: AnyObject?
+    private let stateLock = NSLock()
+    private var isCleaningUp = false
 
     private let maxPacketSize: Int
 
@@ -40,17 +42,30 @@ class PeripheralManager: NSObject {
     }
 
     func cleanup() {
-        if let writeAction = writeQueue {
-            writeAction.leave()
-        }
+        stateLock.lock()
+        isCleaningUp = true
+        let writeAction = writeQueue
+        writeQueue = nil
+        packet = nil
+        writeResponse = nil
+        connectCompletion = nil
+        stateLock.unlock()
+
+        writeAction?.leave()
     }
 
     func write<T>(_ packet: any BasePacket, timeout: TimeInterval = .seconds(5)) throws -> T {
         // Wait until previous write calls have been completed
         writeSemaphore.wait()
 
+        if isCleaningUp {
+            writeSemaphore.signal()
+            throw NSError(domain: "PeripheralManager cleaned up", code: -1, userInfo: nil)
+        }
+
         guard let characteristic = requestCharacteristic else {
             logger.error("Not connected anymore...")
+            writeSemaphore.signal()
             throw NSError(domain: "Not connected anymore...", code: 0, userInfo: nil)
         }
 
@@ -63,7 +78,14 @@ class PeripheralManager: NSObject {
         let writeQ = EversenseKitDispatchGroup()
         writeQ.enter()
 
+        stateLock.lock()
+        if isCleaningUp {
+            stateLock.unlock()
+            writeQ.leave()
+            throw NSError(domain: "PeripheralManager cleaned up", code: -1, userInfo: nil)
+        }
         writeQueue = writeQ
+        stateLock.unlock()
 
         let data = packet.getRequestData()
         if case cgmManager.state.security = .none {
@@ -82,7 +104,12 @@ class PeripheralManager: NSObject {
 
         // Wait for response or timeout timer...
         _ = writeQ.wait(timeout: .now().advanced(by: .seconds(Int(timeout))))
-        writeQueue = nil
+
+        stateLock.lock()
+        if writeQueue === writeQ {
+            writeQueue = nil
+        }
+        stateLock.unlock()
 
         guard let response = writeResponse as? T else {
             writeResponse = nil

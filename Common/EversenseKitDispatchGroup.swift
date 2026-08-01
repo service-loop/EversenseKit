@@ -12,13 +12,16 @@ final class EversenseKitDispatchGroup {
 
     func leave() {
         lock.lock()
-        count -= 1
-        guard count >= 0 else {
-            // Prevent crash on multiple leave calls
+        defer { lock.unlock() }
+
+        guard count > 0 else {
+            // Disconnect cleanup and a response/timeout path can race. Treat
+            // extra leaves as no-ops; leaving the lock held here deadlocks the
+            // next command and can strand the underlying dispatch object.
             return
         }
 
-        lock.unlock()
+        count -= 1
         group.leave()
     }
 
