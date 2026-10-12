@@ -43,10 +43,12 @@ extension Eversense365 {
             let serialNumberData = data.subdata(in: 2 ..< 34)
             let nonce = data.subdata(in: 34 ..< 42)
 
+            let rawFlags = (UInt16(data[43]) << 8) | UInt16(data[42])
+
             return AuthWhoAmIResponse(
                 nonce: nonce,
                 serialNumber: serialNumberData,
-                flags: ((UInt16(data[43]) << 8) | UInt16(data[42]) & 0x0F) == 0
+                flags: (rawFlags & 0x0010) != 0
             )
         }
     }
